@@ -77,5 +77,5 @@ jobs:
             # Export the database URL from GitHub Secrets so it's hidden securely
             export DATABASE_URL="${{ secrets.DATABASE_URL }}"
             
-            # Start in the background (</dev/null prevents SSH from hanging)
-            nohup uvicorn main:app --host 0.0.0.0 --port 8000 </dev/null > backend.log 2>&1 &
+            # Start in the background and disown to survive SSH disconnect
+            nohup uvicorn main:app --host 0.0.0.0 --port 8000 </dev/null > backend.log 2>&1 & disown
