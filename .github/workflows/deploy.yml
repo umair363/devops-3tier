@@ -67,15 +67,14 @@ jobs:
           proxy_username: ubuntu
           proxy_key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Kill any existing python/uvicorn process
+            # Kill any stale uvicorn process (fallback safety)
             pkill -f uvicorn || true
-            
-            # Navigate to backend and restart
-            cd backend
-            source venv/bin/activate
-            
-            # Export the database URL from GitHub Secrets so it's hidden securely
-            export DATABASE_URL="${{ secrets.DATABASE_URL }}"
-            
-            # Start in the background and disown to survive SSH disconnect
-            nohup uvicorn main:app --host 0.0.0.0 --port 8000 </dev/null > backend.log 2>&1 & disown
+
+            # Write the DB URL to the env file (read by systemd service)
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > /home/ubuntu/backend/.env
+
+            # Copy new code into place
+            cp /home/ubuntu/backend/main.py /home/ubuntu/backend/main.py.bak 2>/dev/null || true
+
+            # Restart via systemd - survives SSH disconnect, auto-restarts on crash
+            sudo systemctl restart fastapi
