@@ -1,0 +1,81 @@
+name: Deploy 3-Tier Application
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy-frontend:
+    name: Deploy React Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Node and Build
+        working-directory: ./frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Copy Build to Frontend EC2
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.FRONTEND_IP }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "frontend/dist"
+          target: "/home/ubuntu/"
+
+      - name: Move Files and Restart Nginx
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.FRONTEND_IP }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sudo rm -rf /var/www/html/*
+            sudo cp -r /home/ubuntu/frontend/dist/* /var/www/html/
+            sudo systemctl restart nginx
+
+  deploy-backend:
+    name: Deploy FastAPI Backend (via Jump Host)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Copy Backend Code to Private EC2
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.BACKEND_PRIVATE_IP }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          proxy_host: ${{ secrets.FRONTEND_IP }}
+          proxy_username: ubuntu
+          proxy_key: ${{ secrets.EC2_SSH_KEY }}
+          source: "backend/main.py,backend/requirements.txt"
+          target: "/home/ubuntu/"
+
+      - name: Restart FastAPI on Private EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.BACKEND_PRIVATE_IP }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          proxy_host: ${{ secrets.FRONTEND_IP }}
+          proxy_username: ubuntu
+          proxy_key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Kill any existing python/uvicorn process
+            pkill -f uvicorn || true
+            
+            # Navigate to backend and restart
+            cd backend
+            source venv/bin/activate
+            
+            # Export the database URL from GitHub Secrets so it's hidden securely
+            export DATABASE_URL="${{ secrets.DATABASE_URL }}"
+            
+            # Start in the background
+            nohup uvicorn main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
