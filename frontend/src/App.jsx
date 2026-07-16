@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 
-// The URL is completely empty because we use Nginx to reverse proxy the requests on the same domain
 const API_URL = ""; 
 
 function App() {
@@ -44,71 +43,74 @@ function App() {
     setLoading(false);
   };
 
-  // Convert UTC time from server to Pakistan Standard Time (PKT)
   const formatPakistanTime = (utcDateString) => {
-    const date = new Date(utcDateString + 'Z'); // Append Z to ensure it's parsed as UTC
+    const date = new Date(utcDateString + 'Z');
     return new Intl.DateTimeFormat('en-PK', {
       timeZone: 'Asia/Karachi',
-      dateStyle: 'medium',
+      dateStyle: 'long',
       timeStyle: 'short'
     }).format(date);
   };
 
   return (
-    <div className="dashboard">
-      <header className="header">
-        <h1>Welcome to SettleMint</h1>
-        <p className="greeting">Good to see you! Please log your visit below.</p>
-      </header>
+    <div className="layout">
+      <div className="container">
+        <header className="header">
+          <h1 className="title">SettleMint</h1>
+          <p className="subtitle">A record of visitors and daily field notes.</p>
+        </header>
 
-      <main className="main-content">
-        <section className="input-section">
-          <h2>New Entry</h2>
-          <form onSubmit={handleSubmit} className="log-form">
-            <div className="input-group">
-              <label>Visitor Name</label>
+        <main className="content">
+          <form onSubmit={handleSubmit} className="entry-form">
+            <div className="input-row">
               <input 
                 type="text" 
                 value={name} 
                 onChange={(e) => setName(e.target.value)} 
-                placeholder="e.g. Ali Khan"
+                placeholder="Visitor name"
                 disabled={loading}
+                className="input-field"
+                required
               />
             </div>
-            <div className="input-group">
-              <label>Log Message</label>
+            <div className="input-row">
               <textarea 
                 value={text} 
                 onChange={(e) => setText(e.target.value)} 
-                placeholder="What did you work on today?"
+                placeholder="Log message..."
                 disabled={loading}
+                className="input-field textarea-field"
+                required
               />
             </div>
-            <button type="submit" disabled={loading} className="submit-btn">
-              {loading ? 'Logging...' : 'Submit Log'}
-            </button>
+            <div className="form-actions">
+              <button type="submit" disabled={loading} className="submit-button">
+                <span className="button-text">{loading ? 'Logging' : 'Submit entry'}</span>
+              </button>
+            </div>
           </form>
-        </section>
 
-        <section className="logs-section">
-          <h2>Recent Visitor Logs</h2>
-          <div className="logs-container">
-            {records.length === 0 ? (
-              <div className="empty-state">No logs found. Be the first!</div>
-            ) : (
-              records.map((record) => (
-                <div key={record.id} className="log-card">
-                  <div className="log-header">
-                    <span className="log-author">{record.visitor_name}</span>
-                    <span className="log-time">{formatPakistanTime(record.created_at)}</span>
+          <div className="logs-section">
+            <h2 className="section-title">Recent Logs</h2>
+            <div className="logs-list">
+              {records.length === 0 ? (
+                <p className="empty-state">No logs yet. The slate is clean.</p>
+              ) : (
+                records.map((record) => (
+                  <div key={record.id} className="log-item">
+                    <div className="log-meta">
+                      <span className="log-author">{record.visitor_name}</span>
+                      <span className="log-separator">—</span>
+                      <time className="log-time">{formatPakistanTime(record.created_at)}</time>
+                    </div>
+                    <p className="log-text">{record.text}</p>
                   </div>
-                  <p className="log-text">{record.text}</p>
-                </div>
-              ))
-            )}
+                ))
+              )}
+            </div>
           </div>
-        </section>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
