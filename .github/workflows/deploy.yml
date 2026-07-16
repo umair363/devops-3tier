@@ -67,14 +67,12 @@ jobs:
           proxy_username: ubuntu
           proxy_key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Kill any stale uvicorn process (fallback safety)
-            pkill -f uvicorn || true
-
             # Write the DB URL to the env file (read by systemd service)
             echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > /home/ubuntu/backend/.env
 
-            # Copy new code into place
-            cp /home/ubuntu/backend/main.py /home/ubuntu/backend/main.py.bak 2>/dev/null || true
+            # Restart via systemd non-blocking (avoids SSH session teardown SIGTERM)
+            sudo systemctl restart fastapi --no-block
 
-            # Restart via systemd - survives SSH disconnect, auto-restarts on crash
-            sudo systemctl restart fastapi
+            # Wait for service to settle, then confirm it's running
+            sleep 3
+            sudo systemctl is-active fastapi
