@@ -217,3 +217,49 @@ To make it professional, we added a Load Balancer and a real domain name (`dev.s
    - Selected the newly issued ACM certificate. Click Add.
 
 **Result:** A fully secure, HTTPS-enabled, professionally routed 3-Tier Architecture!
+
+---
+
+## Phase 9: Automated CI/CD Pipeline (GitHub Actions)
+After manually setting up the architecture, we wanted to automate deployments so that any push to the `main` branch would immediately update the servers. However, deploying a 3-tier architecture introduced significant challenges, forcing us to change our initial approach.
+
+### 1. The Private Subnet Deployment Challenge
+**The Problem:** The Backend EC2 is in a private subnet, meaning GitHub Actions cannot connect to it directly to deploy code.
+**The Fix:** We used the Public Frontend EC2 as a **Jump Host (Bastion)**. 
+In our `.github/workflows/deploy.yml`, we utilized the `appleboy/scp-action` and `ssh-action` plugins, configuring the `proxy_host` parameter to tunnel through the Frontend EC2:
+- **Host:** `<BACKEND_PRIVATE_IP>`
+- **Proxy_Host:** `<FRONTEND_PUBLIC_IP>`
+
+### 2. The SSH Hanging & Process Termination Issue
+**The Problem:** Originally in Phase 6, we ran the backend using `nohup uvicorn main:app --host 0.0.0.0 --port 8000 &`. When we tried to script this via GitHub Actions SSH, the pipeline would either freeze indefinitely (waiting for the process to exit) or, if we forced it to disconnect, the FastAPI server would immediately die because the SSH session tearing down sent a `SIGTERM` signal to all child processes.
+**The Fix:** We abandoned `nohup` and upgraded to a proper Linux **systemd** service.
+
+We created a service file on the Backend EC2 (`/etc/systemd/system/fastapi.service`):
+```ini
+[Unit]
+Description=FastAPI Backend
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/backend
+EnvironmentFile=/home/ubuntu/backend/.env
+ExecStart=/home/ubuntu/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+Then, inside the GitHub Actions pipeline, we replaced the startup command with `sudo systemctl restart fastapi --no-block`. The `--no-block` flag was crucial; it tells the system to restart the service in the background and immediately return control to the SSH session, allowing the GitHub Action to complete successfully without killing the server.
+
+### 3. Secure Secrets Management
+Instead of hardcoding the `DATABASE_URL` in the server, the GitHub Action securely injects it during deployment:
+```bash
+echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > /home/ubuntu/backend/.env
+```
+The `systemd` service then reads this `.env` file upon startup.
+
+### 4. Zero-Downtime Frontend Deployment
+For the React frontend, the pipeline installs `npm` dependencies and runs the build process *inside the GitHub Runner*, rather than on our EC2 instance. It then securely SCPs only the lightweight `dist/` folder to the Public EC2 and moves it to `/var/www/html/` before restarting Nginx. This drastically reduces the CPU load on our Frontend EC2 during deployments.
+
+**Final Result:** A fully automated, zero-touch CI/CD pipeline that builds, tunnels through private networks, securely injects secrets, and manages persistent processes gracefully!

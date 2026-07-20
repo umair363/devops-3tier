@@ -1,0 +1,1 @@
+ssh -i key.pem -o StrictHostKeyChecking=no ubuntu@10.0.2.18 "sudo -u postgres psql -d threetierdb -c 'ALTER TABLE records ADD COLUMN IF NOT EXISTS visitor_name VARCHAR;' && sudo -u postgres psql -d threetierdb -c '\d records'"
